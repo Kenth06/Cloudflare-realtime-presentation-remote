@@ -80,7 +80,7 @@ export function Display() {
     return (
       <div className="h-screen w-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="size-8 border-2 border-border border-t-primary rounded-full animate-spin" />
+          <div className="size-8 border-2 border-muted border-t-foreground rounded-full animate-spin" />
           <p className="text-muted-foreground text-sm">Connecting...</p>
         </div>
       </div>
@@ -97,20 +97,20 @@ export function Display() {
 
   return (
     <div className="h-screen w-screen bg-background flex flex-col overflow-hidden select-none">
-      {/* Slide content */}
-      <div className="flex-1 flex items-center justify-center px-20 py-16">
-        <div key={slideKey} className="max-w-4xl w-full animate-slide-in">
-          <h1 className="text-foreground font-bold leading-[1.05] tracking-tight mb-8 text-[clamp(2.5rem,5vw,4.5rem)]">
+      {/* Slide content — centered */}
+      <div className="flex-1 flex items-center justify-center px-[8%] py-16">
+        <div key={slideKey} className="max-w-[900px] w-full animate-slide-in">
+          <h1 className="text-foreground font-bold leading-[1.08] tracking-[-0.02em] mb-6 text-[clamp(2.2rem,4.5vw,4.2rem)]">
             {currentSlide.title}
           </h1>
-          <div className="text-muted-foreground text-[clamp(1.05rem,2vw,1.45rem)] leading-relaxed max-w-3xl space-y-1.5">
+          <div className="text-muted-foreground text-[clamp(1rem,1.8vw,1.35rem)] leading-[1.7] space-y-1">
             {currentSlide.body.split("\n").map((line, i) =>
               line === "" ? (
-                <div key={i} className="h-3" />
+                <div key={i} className="h-4" />
               ) : line.startsWith("- ") ? (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-primary mt-[0.4em] text-[0.4em]">&#9679;</span>
-                  <span className="text-foreground/80">{line.slice(2)}</span>
+                <div key={i} className="flex items-baseline gap-2.5">
+                  <span className="text-foreground/40 text-[0.5em]">&#9679;</span>
+                  <span className="text-foreground/70">{line.slice(2)}</span>
                 </div>
               ) : line.startsWith("```") ? null : (
                 <p key={i}>{line}</p>
@@ -120,31 +120,32 @@ export function Display() {
         </div>
       </div>
 
-      {/* Bottom navigation bar */}
-      <div className="h-14 border-t border-border flex items-center px-5 gap-3">
-        {/* Slide dots */}
+      {/* Bottom bar */}
+      <div className="h-12 border-t border-border flex items-center px-5 gap-4">
+        {/* Slide dots — left */}
         <div className="flex items-center gap-1.5 flex-1">
           {state.slides.map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i)}
               className={cn(
-                "h-1.5 rounded-full transition-all duration-200 cursor-pointer",
+                "h-[5px] rounded-full transition-all duration-200 cursor-pointer",
                 i === state.currentSlide
-                  ? "bg-primary w-5"
-                  : "bg-muted w-1.5 hover:bg-muted-foreground/40"
+                  ? "bg-foreground w-5"
+                  : "bg-muted w-[5px] hover:bg-muted-foreground/50"
               )}
             />
           ))}
         </div>
 
-        {/* Slide counter with nav arrows */}
+        {/* Counter + arrows — right side */}
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={prev}
             disabled={state.currentSlide === 0}
+            className="text-muted-foreground"
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -156,13 +157,19 @@ export function Display() {
             size="icon-sm"
             onClick={next}
             disabled={state.currentSlide === state.slides.length - 1}
+            className="text-muted-foreground"
           >
             <ChevronRight className="size-4" />
           </Button>
         </div>
 
         {/* Fullscreen */}
-        <Button variant="ghost" size="icon-sm" onClick={toggleFullscreen}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={toggleFullscreen}
+          className="text-muted-foreground"
+        >
           {isFullscreen ? (
             <Minimize className="size-3.5" />
           ) : (
@@ -170,12 +177,12 @@ export function Display() {
           )}
         </Button>
 
-        {/* QR code */}
-        <div className="opacity-30 hover:opacity-70 transition-opacity">
+        {/* QR */}
+        <div className="opacity-25 hover:opacity-60 transition-opacity">
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(remoteUrl)}&bgcolor=262626&color=ededed`}
             alt="Remote"
-            className="size-7 rounded-sm"
+            className="size-6 rounded-sm"
           />
         </div>
       </div>
