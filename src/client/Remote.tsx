@@ -1,5 +1,19 @@
-import { useRef, useEffect, useCallback } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  RotateCcw,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "./lib/utils";
 import { useSlides } from "./useSlides";
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export function Remote() {
   const {
@@ -12,6 +26,33 @@ export function Remote() {
     next,
     prev,
   } = useSlides();
+
+  // Timer state
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (timerRunning) {
+      intervalRef.current = setInterval(() => {
+        setTimerSeconds((s) => s + 1);
+      }, 1000);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [timerRunning]);
+
+  const resetTimer = useCallback(() => {
+    setTimerRunning(false);
+    setTimerSeconds(0);
+  }, []);
+
+  const toggleTimer = useCallback(() => {
+    setTimerRunning((r) => !r);
+  }, []);
 
   // Swipe detection
   const touchStartX = useRef(0);
@@ -26,8 +67,6 @@ export function Remote() {
     (e: React.TouchEvent) => {
       const dx = e.changedTouches[0].clientX - touchStartX.current;
       const dy = e.changedTouches[0].clientY - touchStartY.current;
-
-      // Only trigger if horizontal swipe is dominant and > 50px
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
         if (dx < 0 && !isLast) next();
         if (dx > 0 && !isFirst) prev();
@@ -36,36 +75,21 @@ export function Remote() {
     [next, prev, isFirst, isLast]
   );
 
-  // Prevent pull-to-refresh on mobile
+  // Prevent overscroll
   useEffect(() => {
-    const preventPull = (e: TouchEvent) => {
+    const prevent = (e: TouchEvent) => {
       if (e.touches.length > 1) e.preventDefault();
     };
-    document.addEventListener("touchmove", preventPull, { passive: false });
-    return () => document.removeEventListener("touchmove", preventPull);
+    document.addEventListener("touchmove", prevent, { passive: false });
+    return () => document.removeEventListener("touchmove", prevent);
   }, []);
-
-  // Dark mode detection
-  const isDark =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-  const theme = isDark ? darkTheme : lightTheme;
 
   if (!connected) {
     return (
-      <div style={{ ...styles.container, ...theme.container }}>
-        <div style={styles.connectingWrapper}>
-          <div
-            style={{
-              ...styles.dot,
-              background: "#ef4444",
-              animation: "pulse 1.5s infinite",
-            }}
-          />
-          <p style={{ ...styles.connectingText, color: theme.muted }}>
-            Connecting...
-          </p>
+      <div className="h-dvh w-screen bg-luma-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-luma-accent animate-pulse-dot" />
+          <p className="text-luma-text-muted text-sm">Connecting...</p>
         </div>
       </div>
     );
@@ -73,216 +97,132 @@ export function Remote() {
 
   if (!currentSlide) {
     return (
-      <div style={{ ...styles.container, ...theme.container }}>
-        <p style={{ color: theme.muted }}>Loading slides...</p>
+      <div className="h-dvh w-screen bg-luma-bg flex items-center justify-center">
+        <p className="text-luma-text-muted text-sm">Loading...</p>
       </div>
     );
   }
 
   return (
     <div
-      style={{ ...styles.container, ...theme.container }}
+      className="h-dvh w-screen bg-luma-bg flex flex-col select-none overflow-hidden"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
+        {/* Left: live dot + title label */}
+        <div className="flex items-center gap-2 min-w-0">
           <div
-            style={{
-              ...styles.dot,
-              background: connected ? "#22c55e" : "#ef4444",
-            }}
+            className={cn(
+              "w-2 h-2 rounded-full shrink-0",
+              connected ? "bg-luma-success animate-pulse-dot" : "bg-red-500"
+            )}
           />
-          <span style={{ ...styles.liveLabel, color: theme.accent }}>LIVE</span>
-        </div>
-        <span style={{ color: theme.muted, fontSize: "0.9rem" }}>
-          Slide {slideNumber} / {totalSlides}
-        </span>
-      </div>
-
-      {/* Slide title peek */}
-      <div style={{ ...styles.titlePeek, color: theme.text }}>
-        {currentSlide.title}
-      </div>
-
-      {/* Speaker notes */}
-      <div style={{ ...styles.notesContainer, ...theme.notesContainer }}>
-        <div style={styles.notesLabel}>
-          <span style={{ color: theme.muted, fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
-            Speaker Notes
+          <span className="text-luma-text-muted text-xs font-medium uppercase tracking-wider truncate">
+            Title
           </span>
         </div>
-        <p style={{ ...styles.notesText, color: theme.text }}>
-          {currentSlide.speakerNotes}
-        </p>
+
+        {/* Center: slide counter */}
+        <div className="flex items-center gap-3">
+          <span className="text-luma-text-secondary text-sm font-mono tabular-nums">
+            {slideNumber} / {totalSlides}
+          </span>
+        </div>
+
+        {/* Right: timer + start/pause */}
+        <div className="flex items-center gap-2">
+          <span className="text-luma-text-secondary text-sm font-mono tabular-nums min-w-[3rem] text-right">
+            {formatTime(timerSeconds)}
+          </span>
+          <button
+            onClick={toggleTimer}
+            className={cn(
+              "h-7 px-3 rounded-md text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5 transition-colors cursor-pointer",
+              timerRunning
+                ? "bg-luma-surface-raised text-luma-text-secondary hover:text-luma-text"
+                : "bg-luma-accent text-white hover:bg-luma-accent-hover"
+            )}
+          >
+            {timerRunning ? (
+              <>
+                <Pause size={10} /> Pause
+              </>
+            ) : (
+              <>
+                <Play size={10} /> Start
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Navigation buttons */}
-      <div style={styles.navContainer}>
-        <button
-          onClick={prev}
-          disabled={isFirst}
-          style={{
-            ...styles.navButton,
-            ...theme.navButton,
-            opacity: isFirst ? 0.3 : 1,
-            cursor: isFirst ? "default" : "pointer",
-          }}
-        >
-          <span style={styles.navArrow}>&larr;</span>
-          <span style={styles.navLabel}>Prev</span>
-        </button>
-        <button
-          onClick={next}
-          disabled={isLast}
-          style={{
-            ...styles.navButton,
-            ...theme.navButton,
-            opacity: isLast ? 0.3 : 1,
-            cursor: isLast ? "default" : "pointer",
-          }}
-        >
-          <span style={styles.navLabel}>Next</span>
-          <span style={styles.navArrow}>&rarr;</span>
-        </button>
+      {/* Slide title */}
+      <div className="px-4 py-3 border-b border-luma-border-subtle">
+        <h2 className="text-luma-text font-semibold text-lg leading-tight truncate">
+          {currentSlide.title}
+        </h2>
       </div>
 
-      {/* Swipe hint */}
-      <p style={{ ...styles.swipeHint, color: theme.muted }}>
-        Swipe left/right to navigate
-      </p>
+      {/* Speaker notes — scrollable main area */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-4 space-y-3">
+        {/* Notes card */}
+        <div className="bg-luma-surface rounded-xl p-4 border border-luma-border-subtle animate-fade-in">
+          <p className="text-luma-text text-[1.05rem] leading-[1.7]">
+            {currentSlide.speakerNotes}
+          </p>
+        </div>
+
+        {/* Quick reminder card (accent) */}
+        <div className="bg-luma-accent-soft rounded-xl p-4 border border-luma-accent/20">
+          <p className="text-luma-accent text-sm font-medium leading-relaxed">
+            Keep this short. 30 seconds. Get to the point.
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom navigation */}
+      <div className="border-t border-luma-border-subtle px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {/* Nav buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={prev}
+            disabled={isFirst}
+            className={cn(
+              "flex-1 h-14 rounded-xl flex items-center justify-center gap-2 font-semibold text-base transition-all active:scale-[0.97] cursor-pointer",
+              isFirst
+                ? "bg-luma-surface text-luma-text-muted/40 cursor-default"
+                : "bg-luma-surface-raised text-luma-text hover:bg-luma-border"
+            )}
+          >
+            <ChevronLeft size={18} />
+            Prev
+          </button>
+
+          <button
+            onClick={resetTimer}
+            className="w-14 h-14 rounded-xl bg-luma-surface flex items-center justify-center text-luma-text-muted hover:text-luma-text hover:bg-luma-surface-raised transition-colors cursor-pointer active:scale-[0.95]"
+            title="Reset timer"
+          >
+            <RotateCcw size={16} />
+          </button>
+
+          <button
+            onClick={next}
+            disabled={isLast}
+            className={cn(
+              "flex-1 h-14 rounded-xl flex items-center justify-center gap-2 font-semibold text-base transition-all active:scale-[0.97] cursor-pointer",
+              isLast
+                ? "bg-luma-accent/30 text-white/40 cursor-default"
+                : "bg-luma-accent text-white hover:bg-luma-accent-hover"
+            )}
+          >
+            Next
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
-
-const lightTheme = {
-  container: { background: "#f8fafc" },
-  text: "#1e293b",
-  muted: "#94a3b8",
-  accent: "#22c55e",
-  notesContainer: {
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-  },
-  navButton: {
-    background: "#6366f1",
-    color: "#ffffff",
-  },
-};
-
-const darkTheme = {
-  container: { background: "#0f172a" },
-  text: "#e2e8f0",
-  muted: "#64748b",
-  accent: "#22c55e",
-  notesContainer: {
-    background: "#1e293b",
-    border: "1px solid #334155",
-  },
-  navButton: {
-    background: "#6366f1",
-    color: "#ffffff",
-  },
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    width: "100vw",
-    height: "100dvh",
-    display: "flex",
-    flexDirection: "column",
-    padding: "1rem",
-    boxSizing: "border-box",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    overflow: "hidden",
-    userSelect: "none",
-    WebkitUserSelect: "none",
-  },
-  connectingWrapper: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "1rem",
-  },
-  connectingText: {
-    fontSize: "1.1rem",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "0.75rem",
-  },
-  headerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  dot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "50%",
-  },
-  liveLabel: {
-    fontSize: "0.75rem",
-    fontWeight: 700,
-    letterSpacing: "0.05em",
-  },
-  titlePeek: {
-    fontSize: "1.1rem",
-    fontWeight: 600,
-    marginBottom: "0.75rem",
-    lineHeight: 1.3,
-  },
-  notesContainer: {
-    flex: 1,
-    borderRadius: "12px",
-    padding: "1.25rem",
-    overflowY: "auto" as const,
-    WebkitOverflowScrolling: "touch" as const,
-  },
-  notesLabel: {
-    marginBottom: "0.75rem",
-  },
-  notesText: {
-    fontSize: "1.15rem",
-    lineHeight: 1.7,
-    margin: 0,
-  },
-  navContainer: {
-    display: "flex",
-    gap: "0.75rem",
-    marginTop: "0.75rem",
-  },
-  navButton: {
-    flex: 1,
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "0.5rem",
-    padding: "1rem",
-    border: "none",
-    borderRadius: "12px",
-    fontSize: "1.1rem",
-    fontWeight: 600,
-    minHeight: "56px",
-    transition: "opacity 0.15s, transform 0.1s",
-    WebkitTapHighlightColor: "transparent",
-  },
-  navArrow: {
-    fontSize: "1.3rem",
-  },
-  navLabel: {
-    fontSize: "1rem",
-  },
-  swipeHint: {
-    textAlign: "center" as const,
-    fontSize: "0.75rem",
-    marginTop: "0.5rem",
-    marginBottom: 0,
-  },
-};
