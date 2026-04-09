@@ -1,26 +1,55 @@
-import { useEffect, useState, useCallback } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize,
+  Minimize,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "./lib/utils";
 import { useSlides } from "./useSlides";
 
 export function Display() {
-  const { currentSlide, slideNumber, totalSlides, connected, next, prev } =
-    useSlides();
-  const [transitioning, setTransitioning] = useState(false);
-  const [displaySlide, setDisplaySlide] = useState(currentSlide);
+  const {
+    currentSlide,
+    slideNumber,
+    totalSlides,
+    connected,
+    next,
+    prev,
+    goTo,
+    state,
+  } = useSlides();
 
-  // Animate slide transitions
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [slideKey, setSlideKey] = useState(0);
+  const prevSlideRef = useRef(state.currentSlide);
+
+  // Track slide changes for animation
   useEffect(() => {
-    if (!currentSlide) return;
-    setTransitioning(true);
-    const timeout = setTimeout(() => {
-      setDisplaySlide(currentSlide);
-      setTransitioning(false);
-    }, 150);
-    return () => clearTimeout(timeout);
-  }, [currentSlide]);
+    if (state.currentSlide !== prevSlideRef.current) {
+      setSlideKey((k) => k + 1);
+      prevSlideRef.current = state.currentSlide;
+    }
+  }, [state.currentSlide]);
+
+  // Fullscreen tracking
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen?.();
+    }
+  }, []);
 
   // Keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
       switch (e.key) {
         case "ArrowRight":
         case " ":
@@ -35,20 +64,15 @@ export function Display() {
         case "F":
           if (!e.metaKey && !e.ctrlKey) {
             e.preventDefault();
-            document.documentElement.requestFullscreen?.();
+            toggleFullscreen();
           }
           break;
       }
-    },
-    [next, prev]
-  );
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [next, prev, toggleFullscreen]);
 
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
-  // QR code URL for remote
   const remoteUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/remote`
@@ -56,175 +80,135 @@ export function Display() {
 
   if (!connected) {
     return (
-      <div style={styles.container}>
-        <div style={styles.connecting}>
-          <div style={styles.spinner} />
-          <p style={styles.connectingText}>Waiting for connection...</p>
+      <div className="h-screen w-screen bg-luma-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-luma-border border-t-luma-accent rounded-full animate-spin" />
+          <p className="text-luma-text-muted font-sans text-sm tracking-wide">
+            Connecting...
+          </p>
         </div>
       </div>
     );
   }
 
-  if (!displaySlide) {
+  if (!currentSlide) {
     return (
-      <div style={styles.container}>
-        <p style={styles.connectingText}>Loading slides...</p>
+      <div className="h-screen w-screen bg-luma-bg flex items-center justify-center">
+        <p className="text-luma-text-muted text-sm">Loading slides...</p>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div
-        style={{
-          ...styles.slideContent,
-          opacity: transitioning ? 0 : 1,
-          transform: transitioning ? "translateX(20px)" : "translateX(0)",
-        }}
-      >
-        <h1 style={styles.title}>{displaySlide.title}</h1>
-        <div style={styles.body}>
-          {displaySlide.body.split("\n").map((line, i) => (
-            <p key={i} style={line === "" ? styles.emptyLine : styles.bodyLine}>
-              {line}
-            </p>
-          ))}
+    <div className="h-screen w-screen bg-luma-bg flex flex-col overflow-hidden select-none">
+      {/* Main slide area */}
+      <div className="flex-1 flex items-center justify-center px-16 py-12">
+        <div key={slideKey} className="max-w-4xl w-full animate-slide-in">
+          {/* Title */}
+          <h1 className="text-luma-text font-sans font-bold leading-[1.05] tracking-tight mb-6 text-[clamp(2.5rem,5vw,4.5rem)]">
+            {currentSlide.title.split(" ").map((word, i) => {
+              // Accent the second word for Luma-style flair
+              if (i === 1) {
+                return (
+                  <span key={i} className="text-luma-accent">
+                    {word}{" "}
+                  </span>
+                );
+              }
+              return <span key={i}>{word} </span>;
+            })}
+          </h1>
+
+          {/* Body */}
+          <div className="text-luma-text-secondary text-[clamp(1rem,2vw,1.5rem)] leading-relaxed max-w-3xl">
+            {currentSlide.body.split("\n").map((line, i) =>
+              line === "" ? (
+                <div key={i} className="h-3" />
+              ) : line.startsWith("- ") ? (
+                <div key={i} className="flex gap-3 mb-1.5">
+                  <span className="text-luma-accent mt-[0.35em] text-xs">
+                    ●
+                  </span>
+                  <span>{line.slice(2)}</span>
+                </div>
+              ) : line.startsWith("```") ? null : (
+                <p key={i} className="mb-1.5">
+                  {line}
+                </p>
+              )
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Slide counter */}
-      <div style={styles.counter}>
-        {slideNumber} / {totalSlides}
-      </div>
+      {/* Bottom bar */}
+      <div className="h-16 border-t border-luma-border-subtle flex items-center px-6 gap-4">
+        {/* Slide dots */}
+        <div className="flex items-center gap-1.5 flex-1">
+          {state.slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              className={cn(
+                "w-2 h-2 rounded-full transition-all duration-200 cursor-pointer",
+                i === state.currentSlide
+                  ? "bg-luma-accent w-6"
+                  : "bg-luma-border hover:bg-luma-text-muted"
+              )}
+            />
+          ))}
+        </div>
 
-      {/* QR code for remote */}
-      <div style={styles.qrContainer}>
-        <img
-          src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(remoteUrl)}&bgcolor=000000&color=ffffff`}
-          alt="Scan for remote"
-          style={styles.qrCode}
-        />
-        <span style={styles.qrLabel}>/remote</span>
-      </div>
+        {/* Slide counter with arrows */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={prev}
+            disabled={state.currentSlide === 0}
+            className={cn(
+              "w-8 h-8 flex items-center justify-center rounded-md transition-colors",
+              state.currentSlide === 0
+                ? "text-luma-text-muted/30 cursor-default"
+                : "text-luma-text-secondary hover:text-luma-text hover:bg-luma-surface-raised cursor-pointer"
+            )}
+          >
+            <ChevronLeft size={16} />
+          </button>
 
-      {/* Keyboard hint */}
-      <div style={styles.hint}>
-        <kbd style={styles.kbd}>&larr;</kbd> <kbd style={styles.kbd}>&rarr;</kbd>{" "}
-        navigate &nbsp; <kbd style={styles.kbd}>F</kbd> fullscreen
+          <span className="text-luma-text-secondary text-sm font-mono tabular-nums min-w-[3.5rem] text-center">
+            {slideNumber}/{totalSlides}
+          </span>
+
+          <button
+            onClick={next}
+            disabled={state.currentSlide === state.slides.length - 1}
+            className={cn(
+              "w-8 h-8 flex items-center justify-center rounded-md transition-colors",
+              state.currentSlide === state.slides.length - 1
+                ? "text-luma-text-muted/30 cursor-default"
+                : "text-luma-text-secondary hover:text-luma-text hover:bg-luma-surface-raised cursor-pointer"
+            )}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* Fullscreen button */}
+        <button
+          onClick={toggleFullscreen}
+          className="w-8 h-8 flex items-center justify-center rounded-md text-luma-text-muted hover:text-luma-text hover:bg-luma-surface-raised transition-colors cursor-pointer"
+        >
+          {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+        </button>
+
+        {/* QR code */}
+        <div className="ml-2 opacity-40 hover:opacity-80 transition-opacity">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(remoteUrl)}&bgcolor=121212&color=f5f5f5`}
+            alt="Remote"
+            className="w-8 h-8 rounded-sm"
+          />
+        </div>
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    width: "100vw",
-    height: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    background: "linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%)",
-    color: "#ffffff",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    overflow: "hidden",
-    position: "relative",
-    padding: "2rem",
-    boxSizing: "border-box",
-  },
-  connecting: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "1.5rem",
-  },
-  spinner: {
-    width: "48px",
-    height: "48px",
-    border: "4px solid rgba(255,255,255,0.1)",
-    borderTopColor: "#6366f1",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
-  },
-  connectingText: {
-    fontSize: "1.5rem",
-    color: "rgba(255,255,255,0.6)",
-  },
-  slideContent: {
-    maxWidth: "1200px",
-    width: "100%",
-    textAlign: "center",
-    transition: "opacity 0.15s ease, transform 0.15s ease",
-  },
-  title: {
-    fontSize: "clamp(2.5rem, 5vw, 5rem)",
-    fontWeight: 700,
-    marginBottom: "2rem",
-    lineHeight: 1.1,
-    background: "linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    backgroundClip: "text",
-  },
-  body: {
-    fontSize: "clamp(1.2rem, 2.5vw, 2rem)",
-    lineHeight: 1.6,
-    color: "rgba(255,255,255,0.85)",
-    textAlign: "left",
-    maxWidth: "900px",
-    margin: "0 auto",
-  },
-  bodyLine: {
-    margin: "0.3rem 0",
-  },
-  emptyLine: {
-    margin: "0",
-    height: "1rem",
-  },
-  counter: {
-    position: "absolute",
-    bottom: "2rem",
-    right: "2rem",
-    fontSize: "1rem",
-    color: "rgba(255,255,255,0.3)",
-    fontVariantNumeric: "tabular-nums",
-  },
-  qrContainer: {
-    position: "absolute",
-    bottom: "1.5rem",
-    left: "2rem",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "0.25rem",
-    opacity: 0.5,
-    transition: "opacity 0.2s",
-  },
-  qrCode: {
-    width: "80px",
-    height: "80px",
-    borderRadius: "4px",
-  },
-  qrLabel: {
-    fontSize: "0.7rem",
-    color: "rgba(255,255,255,0.5)",
-  },
-  hint: {
-    position: "absolute",
-    bottom: "2rem",
-    left: "50%",
-    transform: "translateX(-50%)",
-    fontSize: "0.8rem",
-    color: "rgba(255,255,255,0.2)",
-  },
-  kbd: {
-    display: "inline-block",
-    padding: "0.15rem 0.5rem",
-    border: "1px solid rgba(255,255,255,0.15)",
-    borderRadius: "4px",
-    fontSize: "0.75rem",
-    fontFamily: "inherit",
-    color: "rgba(255,255,255,0.3)",
-  },
-};
