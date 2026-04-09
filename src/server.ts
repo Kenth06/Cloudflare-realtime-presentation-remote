@@ -102,6 +102,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const agentResponse = await routeAgentRequest(request, env);
     if (agentResponse) return agentResponse;
+
+    // In production, assets with not_found_handling: "single-page-application"
+    // handles SPA routing. In dev, Vite serves the SPA directly.
     return new Response("Not found", { status: 404 });
   },
 };
