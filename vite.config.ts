@@ -1,8 +1,9 @@
-import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [cloudflare()],
+  plugins: [tailwindcss(), cloudflare()],
   esbuild: {
     target: "es2022",
   },
