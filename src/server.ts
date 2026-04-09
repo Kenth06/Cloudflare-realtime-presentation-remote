@@ -1,4 +1,4 @@
-import { Agent, routeAgentRequest, unstable_callable as callable } from "agents";
+import { Agent, callable, routeAgentRequest } from "agents";
 
 export interface Slide {
   title: string;

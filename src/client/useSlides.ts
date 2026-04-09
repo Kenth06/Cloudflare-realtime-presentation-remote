@@ -1,6 +1,6 @@
 import { useAgent } from "agents/react";
-import { useState, useCallback } from "react";
-import type { SlideState, Slide } from "../server";
+import { useCallback, useState } from "react";
+import type { Slide, SlideState } from "../server";
 
 const INITIAL_STATE: SlideState = {
   currentSlide: 0,
@@ -11,12 +11,10 @@ export function useSlides() {
   const [state, setState] = useState<SlideState>(INITIAL_STATE);
   const [connected, setConnected] = useState(false);
 
-  const agent = useAgent({
+  const agent = useAgent<SlideState>({
     agent: "PresentationAgent",
     name: "default",
-    onStateUpdate: (newState: SlideState) => {
-      setState(newState);
-    },
+    onStateUpdate: (newState) => setState(newState),
     onOpen: () => setConnected(true),
     onClose: () => setConnected(false),
     onError: () => setConnected(false),

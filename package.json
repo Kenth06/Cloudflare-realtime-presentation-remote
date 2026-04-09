@@ -10,7 +10,7 @@
     "types": "wrangler types"
   },
   "dependencies": {
-    "agents": "^0.0.98",
+    "agents": "^0.10.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
