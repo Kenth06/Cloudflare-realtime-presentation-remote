@@ -22,6 +22,7 @@ export function Display() {
   } = useSlides();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [slideKey, setSlideKey] = useState(0);
   const prevSlideRef = useRef(state.currentSlide);
 
@@ -177,15 +178,36 @@ export function Display() {
           )}
         </Button>
 
-        {/* QR */}
-        <div className="opacity-25 hover:opacity-60 transition-opacity">
+        {/* QR toggle */}
+        <button
+          onClick={() => setShowQr(true)}
+          className="opacity-25 hover:opacity-60 transition-opacity cursor-pointer"
+        >
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(remoteUrl)}&bgcolor=262626&color=ededed`}
             alt="Remote"
             className="size-6 rounded-sm"
           />
-        </div>
+        </button>
       </div>
+
+      {/* QR overlay */}
+      {showQr && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer animate-fade-in"
+          onClick={() => setShowQr(false)}
+        >
+          <div className="bg-white p-6 rounded-2xl shadow-2xl">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(remoteUrl)}`}
+              alt="Scan to open remote"
+              className="size-56"
+            />
+          </div>
+          <p className="text-white/70 text-sm mt-4 font-mono">{remoteUrl}</p>
+          <p className="text-white/40 text-xs mt-2">Click anywhere to close</p>
+        </div>
+      )}
     </div>
   );
 }
