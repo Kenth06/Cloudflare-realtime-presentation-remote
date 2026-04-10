@@ -35,6 +35,13 @@ export function useSlides() {
     [agent]
   );
 
+  const loadSlides = useCallback(
+    (slides: Slide[]) => {
+      agent.call("loadSlides", [slides]);
+    },
+    [agent]
+  );
+
   const currentSlide: Slide | undefined = state.slides[state.currentSlide];
   const totalSlides = state.slides.length;
   const slideNumber = state.currentSlide + 1;
@@ -52,5 +59,6 @@ export function useSlides() {
     next,
     prev,
     goTo,
+    loadSlides,
   };
 }
