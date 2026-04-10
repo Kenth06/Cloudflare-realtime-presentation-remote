@@ -96,6 +96,17 @@ export class PresentationAgent extends Agent<Env, SlideState> {
       currentSlide: clamped,
     });
   }
+
+  @callable()
+  loadSlides(slides: Slide[]) {
+    if (!Array.isArray(slides) || slides.length === 0) {
+      throw new Error("slides must be a non-empty array");
+    }
+    this.setState({
+      currentSlide: 0,
+      slides,
+    });
+  }
 }
 
 export default {
