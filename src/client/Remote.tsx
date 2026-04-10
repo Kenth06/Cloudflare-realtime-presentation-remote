@@ -4,11 +4,14 @@ import {
   Pause,
   Play,
   RotateCcw,
+  Upload,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSlides } from "./useSlides";
+import type { Slide } from "../server";
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -26,6 +29,7 @@ export function Remote() {
     connected,
     next,
     prev,
+    loadSlides,
   } = useSlides();
 
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -83,6 +87,36 @@ export function Remote() {
     return () => document.removeEventListener("touchmove", prevent);
   }, []);
 
+  // Slide loader modal
+  const [showLoader, setShowLoader] = useState(false);
+  const [jsonInput, setJsonInput] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  const handleLoadSlides = useCallback(() => {
+    setLoadError("");
+    try {
+      const parsed = JSON.parse(jsonInput);
+      const slides: Slide[] = (Array.isArray(parsed) ? parsed : parsed.slides);
+      if (!Array.isArray(slides) || slides.length === 0) {
+        setLoadError("JSON must be an array of slides or { slides: [...] }");
+        return;
+      }
+      for (let i = 0; i < slides.length; i++) {
+        const s = slides[i];
+        if (!s.title || !s.body) {
+          setLoadError(`Slide ${i + 1} is missing "title" or "body"`);
+          return;
+        }
+        if (!s.speakerNotes) s.speakerNotes = "";
+      }
+      loadSlides(slides);
+      setShowLoader(false);
+      setJsonInput("");
+    } catch {
+      setLoadError("Invalid JSON. Check the format and try again.");
+    }
+  }, [jsonInput, loadSlides]);
+
   if (!connected) {
     return (
       <div className="h-dvh w-screen bg-background flex items-center justify-center">
@@ -127,6 +161,12 @@ export function Remote() {
           <span className="text-muted-foreground text-sm font-mono tabular-nums">
             {slideNumber} / {totalSlides}
           </span>
+          <button
+            onClick={() => setShowLoader(true)}
+            className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <Upload className="size-3.5" />
+          </button>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -220,6 +260,62 @@ export function Remote() {
           </Button>
         </div>
       </div>
+
+      {/* Slide loader modal */}
+      {showLoader && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col animate-fade-in">
+          {/* Modal header */}
+          <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2.5">
+            <h2 className="text-foreground font-semibold text-base">Load Slides</h2>
+            <button
+              onClick={() => { setShowLoader(false); setLoadError(""); }}
+              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+          <div className="h-px bg-border mx-4" />
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Paste a JSON array of slides. Each slide needs{" "}
+              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">title</code> and{" "}
+              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">body</code>.{" "}
+              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">speakerNotes</code> is optional.
+            </p>
+
+            <textarea
+              value={jsonInput}
+              onChange={(e) => { setJsonInput(e.target.value); setLoadError(""); }}
+              placeholder={`[
+  {
+    "title": "My First Slide",
+    "body": "Content here...",
+    "speakerNotes": "Notes for the presenter"
+  }
+]`}
+              className="flex-1 min-h-[200px] bg-card border border-border rounded-lg p-3 text-foreground text-sm font-mono leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring/50 placeholder:text-muted-foreground/40"
+            />
+
+            {loadError && (
+              <p className="text-destructive text-xs font-medium">{loadError}</p>
+            )}
+          </div>
+
+          {/* Modal footer */}
+          <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-border">
+            <Button
+              className="w-full h-12 text-sm font-semibold gap-2"
+              onClick={handleLoadSlides}
+              disabled={!jsonInput.trim()}
+            >
+              <Upload className="size-4" />
+              Load Slides
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
