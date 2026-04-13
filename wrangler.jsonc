@@ -20,5 +20,8 @@
       "tag": "v1",
       "new_sqlite_classes": ["PresentationAgent"]
     }
-  ]
+  ],
+  "ai": {
+    "binding": "AI"
+  }
 }
