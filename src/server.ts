@@ -1,4 +1,5 @@
 import { Agent, callable, routeAgentRequest } from "agents";
+import type { Connection, ConnectionContext } from "agents";
 
 export interface Slide {
   title: string;
@@ -9,6 +10,14 @@ export interface Slide {
 export interface SlideState {
   currentSlide: number;
   slides: Slide[];
+  // Presence
+  viewers: number;
+  // Synced timer
+  timerStartedAt: number | null;
+  timerPausedElapsed: number;
+  timerRunning: boolean;
+  // Metadata
+  presentationName: string;
 }
 
 const DEMO_SLIDES: Slide[] = [
@@ -66,7 +75,30 @@ export class PresentationAgent extends Agent<Env, SlideState> {
   initialState: SlideState = {
     currentSlide: 0,
     slides: DEMO_SLIDES,
+    viewers: 0,
+    timerStartedAt: null,
+    timerPausedElapsed: 0,
+    timerRunning: false,
+    presentationName: "",
   };
+
+  // --- Presence ---
+
+  onConnect(_conn: Connection, _ctx: ConnectionContext) {
+    this.setState({
+      ...this.state,
+      viewers: this.state.viewers + 1,
+    });
+  }
+
+  onClose() {
+    this.setState({
+      ...this.state,
+      viewers: Math.max(0, this.state.viewers - 1),
+    });
+  }
+
+  // --- Slide navigation ---
 
   @callable()
   next() {
@@ -103,8 +135,102 @@ export class PresentationAgent extends Agent<Env, SlideState> {
       throw new Error("slides must be a non-empty array");
     }
     this.setState({
+      ...this.state,
       currentSlide: 0,
       slides,
+    });
+  }
+
+  // --- Synced timer ---
+
+  @callable()
+  startTimer() {
+    this.setState({
+      ...this.state,
+      timerStartedAt: Date.now(),
+      timerRunning: true,
+    });
+  }
+
+  @callable()
+  pauseTimer() {
+    const elapsed = this.state.timerStartedAt
+      ? Date.now() - this.state.timerStartedAt
+      : 0;
+    this.setState({
+      ...this.state,
+      timerPausedElapsed: this.state.timerPausedElapsed + elapsed,
+      timerStartedAt: null,
+      timerRunning: false,
+    });
+  }
+
+  @callable()
+  resetTimer() {
+    this.setState({
+      ...this.state,
+      timerStartedAt: null,
+      timerPausedElapsed: 0,
+      timerRunning: false,
+    });
+  }
+
+  // --- Metadata ---
+
+  @callable()
+  renamePresentation(name: string) {
+    this.setState({
+      ...this.state,
+      presentationName: name,
+    });
+  }
+
+  // --- AI Generation ---
+
+  @callable()
+  async generateSlides(topic: string, slideCount: number) {
+    const count = Math.max(2, Math.min(slideCount, 20));
+    const prompt = `Generate a presentation with exactly ${count} slides about: ${topic}
+
+Return ONLY a JSON array (no markdown, no code fences) where each element has:
+- "title": string (concise slide title)
+- "body": string (slide content with bullet points using "- " prefix, separated by newlines)
+- "speakerNotes": string (1-2 sentences of presenter guidance)
+
+Example format:
+[{"title":"...","body":"- Point 1\\n- Point 2","speakerNotes":"..."}]`;
+
+    const response = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages: [
+        { role: "system", content: "You are a presentation designer. Return only valid JSON arrays. No markdown fences, no explanation." },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 4096,
+    });
+
+    const text = (response as { response?: string }).response ?? "";
+    // Extract JSON array from response (strip any surrounding text)
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) {
+      throw new Error("AI did not return valid slide data");
+    }
+
+    const slides: Slide[] = JSON.parse(match[0]);
+    if (!Array.isArray(slides) || slides.length === 0) {
+      throw new Error("AI returned an empty slide array");
+    }
+
+    // Sanitize
+    const cleaned = slides.map((s) => ({
+      title: String(s.title || "Untitled"),
+      body: String(s.body || ""),
+      speakerNotes: String(s.speakerNotes || ""),
+    }));
+
+    this.setState({
+      ...this.state,
+      currentSlide: 0,
+      slides: cleaned,
     });
   }
 }
