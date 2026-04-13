@@ -13,6 +13,45 @@ import { cn } from "@/lib/utils";
 import { useSlides } from "./useSlides";
 import type { Slide } from "../server";
 
+function parseMarkdownSlides(input: string): Slide[] {
+  const sections = input.split(/^---$/m).map((s) => s.trim()).filter(Boolean);
+  return sections.map((section) => {
+    const lines = section.split("\n");
+    let title = "";
+    const bodyLines: string[] = [];
+    const noteLines: string[] = [];
+
+    for (const line of lines) {
+      if (!title && /^#{1,2}\s+/.test(line)) {
+        title = line.replace(/^#{1,2}\s+/, "").trim();
+      } else if (/^>\s?/.test(line)) {
+        noteLines.push(line.replace(/^>\s?/, ""));
+      } else {
+        bodyLines.push(line);
+      }
+    }
+
+    // If no heading found, use first non-empty line as title
+    if (!title) {
+      const idx = bodyLines.findIndex((l) => l.trim() !== "");
+      if (idx !== -1) {
+        title = bodyLines.splice(idx, 1)[0].trim();
+      }
+    }
+
+    return {
+      title: title || "Untitled",
+      body: bodyLines.join("\n").trim(),
+      speakerNotes: noteLines.join(" ").trim(),
+    };
+  });
+}
+
+function looksLikeJson(input: string): boolean {
+  const trimmed = input.trimStart();
+  return trimmed.startsWith("[") || trimmed.startsWith("{");
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -94,27 +133,42 @@ export function Remote() {
 
   const handleLoadSlides = useCallback(() => {
     setLoadError("");
-    try {
-      const parsed = JSON.parse(jsonInput);
-      const slides: Slide[] = (Array.isArray(parsed) ? parsed : parsed.slides);
-      if (!Array.isArray(slides) || slides.length === 0) {
-        setLoadError("JSON must be an array of slides or { slides: [...] }");
-        return;
-      }
-      for (let i = 0; i < slides.length; i++) {
-        const s = slides[i];
-        if (!s.title || !s.body) {
-          setLoadError(`Slide ${i + 1} is missing "title" or "body"`);
+    const input = jsonInput.trim();
+    if (!input) return;
+
+    let slides: Slide[];
+
+    if (looksLikeJson(input)) {
+      try {
+        const parsed = JSON.parse(input);
+        slides = Array.isArray(parsed) ? parsed : parsed.slides;
+        if (!Array.isArray(slides) || slides.length === 0) {
+          setLoadError("JSON must be an array of slides or { slides: [...] }");
           return;
         }
-        if (!s.speakerNotes) s.speakerNotes = "";
+        for (let i = 0; i < slides.length; i++) {
+          const s = slides[i];
+          if (!s.title || !s.body) {
+            setLoadError(`Slide ${i + 1} is missing "title" or "body"`);
+            return;
+          }
+          if (!s.speakerNotes) s.speakerNotes = "";
+        }
+      } catch {
+        setLoadError("Invalid JSON. Check the format and try again.");
+        return;
       }
-      loadSlides(slides);
-      setShowLoader(false);
-      setJsonInput("");
-    } catch {
-      setLoadError("Invalid JSON. Check the format and try again.");
+    } else {
+      slides = parseMarkdownSlides(input);
+      if (slides.length === 0) {
+        setLoadError("No slides found. Separate slides with --- on its own line.");
+        return;
+      }
     }
+
+    loadSlides(slides);
+    setShowLoader(false);
+    setJsonInput("");
   }, [jsonInput, loadSlides]);
 
   if (!connected) {
@@ -279,22 +333,27 @@ export function Remote() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Paste a JSON array of slides. Each slide needs{" "}
-              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">title</code> and{" "}
-              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">body</code>.{" "}
-              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">speakerNotes</code> is optional.
+              Paste <strong className="text-foreground">Markdown</strong> (separate slides with{" "}
+              <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">---</code>) or{" "}
+              <strong className="text-foreground">JSON</strong>. Format is auto-detected.
             </p>
 
             <textarea
               value={jsonInput}
               onChange={(e) => { setJsonInput(e.target.value); setLoadError(""); }}
-              placeholder={`[
-  {
-    "title": "My First Slide",
-    "body": "Content here...",
-    "speakerNotes": "Notes for the presenter"
-  }
-]`}
+              placeholder={`# Welcome to My Talk
+The intro slide body goes here.
+
+> Speaker notes: greet the audience
+
+---
+
+# Key Points
+- First important thing
+- Second important thing
+- Third important thing
+
+> Remember to pause after each point`}
               className="flex-1 min-h-[200px] bg-card border border-border rounded-lg p-3 text-foreground text-sm font-mono leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ring/50 placeholder:text-muted-foreground/40"
             />
 
