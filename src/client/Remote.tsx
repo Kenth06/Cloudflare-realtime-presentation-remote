@@ -1,10 +1,13 @@
 import {
   ChevronLeft,
   ChevronRight,
+  Loader2,
   Pause,
   Play,
   RotateCcw,
+  Sparkles,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,7 +34,6 @@ function parseMarkdownSlides(input: string): Slide[] {
       }
     }
 
-    // If no heading found, use first non-empty line as title
     if (!title) {
       const idx = bodyLines.findIndex((l) => l.trim() !== "");
       if (idx !== -1) {
@@ -58,7 +60,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function Remote() {
+export function Remote({ presentationId }: { presentationId?: string }) {
   const {
     currentSlide,
     slideNumber,
@@ -66,36 +68,17 @@ export function Remote() {
     isFirst,
     isLast,
     connected,
+    viewers,
+    timerSeconds,
+    timerRunning,
     next,
     prev,
     loadSlides,
-  } = useSlides();
-
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (timerRunning) {
-      intervalRef.current = setInterval(() => {
-        setTimerSeconds((s) => s + 1);
-      }, 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [timerRunning]);
-
-  const resetTimer = useCallback(() => {
-    setTimerRunning(false);
-    setTimerSeconds(0);
-  }, []);
-
-  const toggleTimer = useCallback(() => {
-    setTimerRunning((r) => !r);
-  }, []);
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    generateSlides,
+  } = useSlides(presentationId);
 
   // Swipe detection
   const touchStartX = useRef(0);
@@ -130,6 +113,9 @@ export function Remote() {
   const [showLoader, setShowLoader] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiCount, setAiCount] = useState(6);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const handleLoadSlides = useCallback(() => {
     setLoadError("");
@@ -171,6 +157,29 @@ export function Remote() {
     setJsonInput("");
   }, [jsonInput, loadSlides]);
 
+  const handleGenerate = useCallback(async () => {
+    if (!aiTopic.trim() || aiLoading) return;
+    setAiLoading(true);
+    setLoadError("");
+    try {
+      await generateSlides(aiTopic.trim(), aiCount);
+      setShowLoader(false);
+      setAiTopic("");
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "AI generation failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiTopic, aiCount, aiLoading, generateSlides]);
+
+  const toggleTimer = useCallback(() => {
+    if (timerRunning) {
+      pauseTimer();
+    } else {
+      startTimer();
+    }
+  }, [timerRunning, startTimer, pauseTimer]);
+
   if (!connected) {
     return (
       <div className="h-dvh w-screen bg-background flex items-center justify-center">
@@ -209,8 +218,12 @@ export function Remote() {
               )}
             />
             <span className="text-muted-foreground text-xs uppercase tracking-widest font-medium">
-              Title
+              Live
             </span>
+          </div>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Users className="size-3" />
+            <span className="text-xs font-mono tabular-nums">{viewers}</span>
           </div>
           <span className="text-muted-foreground text-sm font-mono tabular-nums">
             {slideNumber} / {totalSlides}
@@ -332,6 +345,57 @@ export function Remote() {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+            {/* AI Generation section */}
+            <div className="bg-card rounded-lg border border-border p-3 space-y-2.5">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-warm" />
+                <span className="text-foreground text-xs font-semibold">Generate with AI</span>
+              </div>
+              <input
+                type="text"
+                value={aiTopic}
+                onChange={(e) => setAiTopic(e.target.value)}
+                placeholder="Topic, e.g. 'Intro to WebSockets'"
+                className="w-full h-9 bg-background border border-border rounded-md px-3 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50"
+              />
+              <div className="flex items-center gap-2">
+                <select
+                  value={aiCount}
+                  onChange={(e) => setAiCount(Number(e.target.value))}
+                  className="h-9 bg-background border border-border rounded-md px-2 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+                >
+                  {[3, 4, 5, 6, 8, 10, 12].map((n) => (
+                    <option key={n} value={n}>{n} slides</option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={handleGenerate}
+                  disabled={!aiTopic.trim() || aiLoading}
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-3.5" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-muted-foreground text-[0.65rem] uppercase tracking-widest">or paste</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
             <p className="text-muted-foreground text-xs leading-relaxed">
               Paste <strong className="text-foreground">Markdown</strong> (separate slides with{" "}
               <code className="text-foreground font-mono text-[0.7rem] bg-muted px-1 py-0.5 rounded">---</code>) or{" "}
