@@ -3,23 +3,25 @@ import {
   ChevronRight,
   Maximize,
   Minimize,
+  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSlides } from "./useSlides";
 
-export function Display() {
+export function Display({ presentationId }: { presentationId?: string }) {
   const {
     currentSlide,
     slideNumber,
     totalSlides,
     connected,
+    viewers,
     next,
     prev,
     goTo,
     state,
-  } = useSlides();
+  } = useSlides(presentationId);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showQr, setShowQr] = useState(false);
@@ -162,6 +164,12 @@ export function Display() {
           >
             <ChevronRight className="size-4" />
           </Button>
+        </div>
+
+        {/* Viewers */}
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <Users className="size-3" />
+          <span className="text-xs font-mono tabular-nums">{viewers}</span>
         </div>
 
         {/* Fullscreen */}
